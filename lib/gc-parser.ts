@@ -64,15 +64,17 @@ interface OptionRow {
   close: number;
 }
 
-// Shared underlying data (all GC contracts share the same underlying)
-let cachedUnderlying: UnderlyingRow[] | null = null;
+// Per-contract underlying data (each contract uses its specific gc_future price)
+const underlyingCache = new Map<string, UnderlyingRow[]>();
 
-export async function fetchGCUnderlying(): Promise<UnderlyingRow[]> {
-  if (cachedUnderlying) return cachedUnderlying;
-  const res = await fetch('/data/gc/underlying.json');
-  if (!res.ok) throw new Error('No GC underlying data');
-  cachedUnderlying = await res.json();
-  return cachedUnderlying!;
+export async function fetchGCUnderlying(contract: string): Promise<UnderlyingRow[]> {
+  const cached = underlyingCache.get(contract);
+  if (cached) return cached;
+  const res = await fetch(`/data/gc/${contract}_underlying.json`);
+  if (!res.ok) throw new Error(`No underlying data for ${contract}`);
+  const data = await res.json();
+  underlyingCache.set(contract, data);
+  return data;
 }
 
 export async function fetchGCOptions(contract: string): Promise<OptionRow[]> {

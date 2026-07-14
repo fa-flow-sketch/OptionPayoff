@@ -83,7 +83,7 @@ export default function SimulatorClient() {
     setSimResult(null);
 
     Promise.all([
-      fetchGCUnderlying(),
+      fetchGCUnderlying(gcContract),
       fetchGCOptions(gcContract),
     ])
       .then(([underlying, options]) => {
