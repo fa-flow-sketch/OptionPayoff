@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#1a1a2e"/>
+  <path d="M128 60 L200 90 L200 166 L128 196 L56 166 L56 90 Z" fill="#F5A623"/>
+  <path d="M128 70 L190 95 L190 161 L128 186 L66 161 L66 95 Z" fill="#D4941A"/>
+  <text x="128" y="155" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#1a1a2e" text-anchor="middle">GC</text>
+</svg>
