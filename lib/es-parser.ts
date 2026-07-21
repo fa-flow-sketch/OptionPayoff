@@ -3,40 +3,58 @@ import type { BarData } from './csv-parser';
 
 // ES futures quarterly expiration dates (3rd Friday of contract month, approximate)
 const ES_EXPIRY: Record<string, string> = {
-  ESH6: '2026-03-20',
-  ESM6: '2026-06-19',
-  ESU6: '2026-09-18',
-  ESZ6: '2026-12-18',
-  ESH7: '2027-03-19',
-  ESM7: '2027-06-18',
-  ESU7: '2027-09-17',
-  ESZ7: '2027-12-17',
+  ESH0: '2020-03-20', ESH1: '2021-03-19', ESH2: '2022-03-18', ESH3: '2023-03-17',
+  ESH4: '2024-03-15', ESH5: '2025-03-21', ESH6: '2026-03-20', ESH7: '2027-03-19',
   ESH8: '2028-03-17',
+  ESM0: '2020-06-19', ESM1: '2021-06-18', ESM2: '2022-06-17', ESM3: '2023-06-16',
+  ESM4: '2024-06-21', ESM5: '2025-06-20', ESM6: '2026-06-19', ESM7: '2027-06-18',
   ESM8: '2028-06-16',
-  ESU8: '2028-09-15',
-  ESZ8: '2028-12-15',
-  ESH9: '2029-03-16',
-  ESM9: '2029-06-15',
-  ESU9: '2029-09-21',
-  ESZ9: '2029-12-21',
-  ESZ0: '2030-12-20',
+  ESU0: '2020-09-18', ESU1: '2021-09-17', ESU2: '2022-09-16', ESU3: '2023-09-15',
+  ESU4: '2024-09-20', ESU5: '2025-09-19', ESU6: '2026-09-18', ESU7: '2027-09-17',
+  ESZ0: '2020-12-18', ESZ1: '2021-12-17', ESZ2: '2022-12-16', ESZ3: '2023-12-15',
+  ESZ4: '2024-12-20', ESZ5: '2025-12-19', ESZ6: '2026-12-18', ESZ7: '2027-12-17',
+  ESZ8: '2028-12-15', ESZ9: '2029-12-21',
 };
 
-// All known ES contracts with underlying row counts for the bundled dataset
+// All known ES contracts with underlying row counts
 export const ALL_ES_CONTRACTS: { symbol: string; label: string; rows: number }[] = [
-  { symbol: 'ESH6', label: 'ESH6 (Mar 2026)', rows: 1273 },
-  { symbol: 'ESM6', label: 'ESM6 (Jun 2026)', rows: 1409 },
-  { symbol: 'ESU6', label: 'ESU6 (Sep 2026)', rows: 630 },
-  { symbol: 'ESZ6', label: 'ESZ6 (Dec 2026)', rows: 30 },
-  { symbol: 'ESH7', label: 'ESH7 (Mar 2027)', rows: 5 },
-  { symbol: 'ESM7', label: 'ESM7 (Jun 2027)', rows: 0 },
-  { symbol: 'ESU7', label: 'ESU7 (Sep 2027)', rows: 0 },
-  { symbol: 'ESZ7', label: 'ESZ7 (Dec 2027)', rows: 0 },
-  { symbol: 'ESH8', label: 'ESH8 (Mar 2028)', rows: 0 },
-  { symbol: 'ESZ8', label: 'ESZ8 (Dec 2028)', rows: 0 },
-  { symbol: 'ESZ9', label: 'ESZ9 (Dec 2029)', rows: 0 },
-  { symbol: 'ESZ0', label: 'ESZ0 (Dec 2030)', rows: 0 },
-];
+  { symbol: 'ESH0', label: 'ESH0 (Mar 2020)', rows: 84248 },
+  { symbol: 'ESM0', label: 'ESM0 (Jun 2020)', rows: 146225 },
+  { symbol: 'ESU0', label: 'ESU0 (Sep 2020)', rows: 128019 },
+  { symbol: 'ESZ0', label: 'ESZ0 (Dec 2020)', rows: 132390 },
+  { symbol: 'ESH1', label: 'ESH1 (Mar 2021)', rows: 105091 },
+  { symbol: 'ESM1', label: 'ESM1 (Jun 2021)', rows: 96077 },
+  { symbol: 'ESU1', label: 'ESU1 (Sep 2021)', rows: 91846 },
+  { symbol: 'ESZ1', label: 'ESZ1 (Dec 2021)', rows: 117600 },
+  { symbol: 'ESH2', label: 'ESH2 (Mar 2022)', rows: 120755 },
+  { symbol: 'ESM2', label: 'ESM2 (Jun 2022)', rows: 117841 },
+  { symbol: 'ESU2', label: 'ESU2 (Sep 2022)', rows: 112890 },
+  { symbol: 'ESZ2', label: 'ESZ2 (Dec 2022)', rows: 138105 },
+  { symbol: 'ESH3', label: 'ESH3 (Mar 2023)', rows: 109039 },
+  { symbol: 'ESM3', label: 'ESM3 (Jun 2023)', rows: 102352 },
+  { symbol: 'ESU3', label: 'ESU3 (Sep 2023)', rows: 82915 },
+  { symbol: 'ESZ3', label: 'ESZ3 (Dec 2023)', rows: 104816 },
+  { symbol: 'ESH4', label: 'ESH4 (Mar 2024)', rows: 89661 },
+  { symbol: 'ESM4', label: 'ESM4 (Jun 2024)', rows: 96171 },
+  { symbol: 'ESU4', label: 'ESU4 (Sep 2024)', rows: 100653 },
+  { symbol: 'ESZ4', label: 'ESZ4 (Dec 2024)', rows: 101543 },
+  { symbol: 'ESH5', label: 'ESH5 (Mar 2025)', rows: 90464 },
+  { symbol: 'ESM5', label: 'ESM5 (Jun 2025)', rows: 88567 },
+  { symbol: 'ESU5', label: 'ESU5 (Sep 2025)', rows: 71372 },
+  { symbol: 'ESZ5', label: 'ESZ5 (Dec 2025)', rows: 85894 },
+  { symbol: 'ESH6', label: 'ESH6 (Mar 2026)', rows: 80916 },
+  { symbol: 'ESM6', label: 'ESM6 (Jun 2026)', rows: 84246 },
+  { symbol: 'ESU6', label: 'ESU6 (Sep 2026)', rows: 31235 },
+  { symbol: 'ESZ6', label: 'ESZ6 (Dec 2026)', rows: 17745 },
+  { symbol: 'ESH7', label: 'ESH7 (Mar 2027)', rows: 4924 },
+  { symbol: 'ESM7', label: 'ESM7 (Jun 2027)', rows: 1973 },
+  { symbol: 'ESU7', label: 'ESU7 (Sep 2027)', rows: 669 },
+  { symbol: 'ESZ7', label: 'ESZ7 (Dec 2027)', rows: 2571 },
+  { symbol: 'ESH8', label: 'ESH8 (Mar 2028)', rows: 180 },
+  { symbol: 'ESM8', label: 'ESM8 (Jun 2028)', rows: 25 },
+  { symbol: 'ESZ8', label: 'ESZ8 (Dec 2028)', rows: 672 },
+  { symbol: 'ESZ9', label: 'ESZ9 (Dec 2029)', rows: 261 },
+].sort((a, b) => (ES_EXPIRY[a.symbol] ?? '').localeCompare(ES_EXPIRY[b.symbol] ?? ''));
 
 interface UnderlyingRow {
   ts_event: string;
@@ -124,7 +142,6 @@ export function parseESData(
     if (rawPrice !== undefined) {
       lastPrice = rawPrice;
     }
-    // else: forward-fill — use lastPrice
 
     const S = lastPrice;
     const opts = optsByTs.get(tsKey) ?? [];
@@ -165,4 +182,3 @@ export function parseESData(
   bars.sort((a, b) => a.timestamp - b.timestamp);
   return bars;
 }
-
