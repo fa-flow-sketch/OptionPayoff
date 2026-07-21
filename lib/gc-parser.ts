@@ -1,3 +1,4 @@
+import { ungzip } from 'pako';
 import type { BarData } from './csv-parser';
 
 // GC futures option expiration dates (approximate, for DTE calculations)
@@ -139,10 +140,9 @@ const underlyingCache = new Map<string, UnderlyingRow[]>();
 async function fetchAndDecompress(url: string): Promise<any> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}`);
-  const blob = await res.blob();
-  const ds = new DecompressionStream('gzip');
-  const decompressed = await new Response(blob.stream().pipeThrough(ds)).text();
-  return JSON.parse(decompressed);
+  const buf = await res.arrayBuffer();
+  const decompressed = ungzip(new Uint8Array(buf));
+  return JSON.parse(new TextDecoder().decode(decompressed));
 }
 
 export async function fetchGCUnderlying(contract: string): Promise<UnderlyingRow[]> {
