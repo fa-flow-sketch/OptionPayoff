@@ -61,7 +61,6 @@ export const ALL_GC_CONTRACTS: { symbol: string; label: string; rows: number }[]
   { symbol: 'OGJ4', label: 'OGJ4 (Apr 2024)', rows: 43002 },
   { symbol: 'OGJ5', label: 'OGJ5 (Apr 2025)', rows: 58068 },
   { symbol: 'OGJ6', label: 'OGJ6 (Apr 2026)', rows: 29870 },
-  { symbol: 'OGJ7', label: 'OGJ7 (Apr 2027)', rows: 70 },
   { symbol: 'OGK0', label: 'OGK0 (May 2020)', rows: 39474 },
   { symbol: 'OGK1', label: 'OGK1 (May 2021)', rows: 27161 },
   { symbol: 'OGK2', label: 'OGK2 (May 2022)', rows: 27866 },
