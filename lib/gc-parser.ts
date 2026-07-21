@@ -117,7 +117,7 @@ export const ALL_GC_CONTRACTS: { symbol: string; label: string; rows: number }[]
   { symbol: 'OGZ4', label: 'OGZ4 (Dec 2024)', rows: 87356 },
   { symbol: 'OGZ5', label: 'OGZ5 (Dec 2025)', rows: 104142 },
   { symbol: 'OGZ6', label: 'OGZ6 (Dec 2026)', rows: 3735 },
-];
+].sort((a, b) => (GC_EXPIRY[a.symbol] ?? '').localeCompare(GC_EXPIRY[b.symbol] ?? ''));
 
 interface UnderlyingRow {
   ts_event: string;
