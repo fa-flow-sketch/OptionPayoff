@@ -35,3 +35,4 @@ next-env.d.ts
 
 # gzipped copies (Next.js handles compression)
 *.gz
+!public/data/gc/*.json.gz
