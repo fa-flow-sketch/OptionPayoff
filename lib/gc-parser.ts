@@ -1,3 +1,4 @@
+import { ungzip } from 'pako';
 import type { BarData } from './csv-parser';
 
 // GC futures option expiration dates (approximate, for DTE calculations)
@@ -136,20 +137,24 @@ interface OptionRow {
 // Per-contract underlying data (each contract uses its specific gc_future price)
 const underlyingCache = new Map<string, UnderlyingRow[]>();
 
+async function fetchAndDecompress(url: string): Promise<any> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch ${url}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  return JSON.parse(new TextDecoder().decode(ungzip(bytes)));
+}
+
 export async function fetchGCUnderlying(contract: string): Promise<UnderlyingRow[]> {
   const cached = underlyingCache.get(contract);
   if (cached) return cached;
-  const res = await fetch(`/data/gc/${contract}_underlying.json`);
-  if (!res.ok) throw new Error(`Failed to fetch underlying data for ${contract}`);
-  const data = await res.json();
+  const data = await fetchAndDecompress(`/data/gc/${contract}_underlying.json.gz`);
   underlyingCache.set(contract, data);
   return data;
 }
 
 export async function fetchGCOptions(contract: string): Promise<OptionRow[]> {
-  const res = await fetch(`/data/gc/${contract}_options.json`);
-  if (!res.ok) throw new Error(`No options data for ${contract}`);
-  return res.json();
+  return fetchAndDecompress(`/data/gc/${contract}_options.json.gz`);
 }
 
 export function parseGCData(
