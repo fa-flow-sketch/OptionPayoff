@@ -103,44 +103,43 @@ export function parseESData(
     optsByTs.get(ts)!.push(opt);
   }
 
-  // Index underlying prices by timestamp
-  const priceByTs = new Map<string, number>();
-  for (const row of underlying) {
-    priceByTs.set(normTs(row.ts_event), row.underlying_price);
-  }
+  // Sort underlying data by timestamp for forward-fill iteration
+  const sortedUnderlying = [...underlying].sort((a, b) =>
+    new Date(a.ts_event).getTime() - new Date(b.ts_event).getTime()
+  );
 
-  // Sort timestamps
-  const allTimestamps = [...new Set([
-    ...underlying.map(r => r.ts_event),
-    ...options.map(o => o.ts_event),
-  ])].sort();
-
-  if (allTimestamps.length === 0) return [];
+  if (sortedUnderlying.length === 0) return [];
 
   // Get expiry date for the selected contract
   const expiryDate = ES_EXPIRY[contract];
   const expiryTime = expiryDate ? new Date(expiryDate + 'T23:59:59Z').getTime() : null;
 
-  // Generate continuous hourly timeline, truncated at contract expiry
-  const firstTs = new Date(allTimestamps[0]).getTime();
-  let lastTs = new Date(allTimestamps[allTimestamps.length - 1]).getTime();
+  const HOUR_MS = 3600 * 1000;
+  const firstTs = new Date(sortedUnderlying[0].ts_event).getTime();
+  let lastTs = new Date(sortedUnderlying[sortedUnderlying.length - 1].ts_event).getTime();
   if (expiryTime && expiryTime < lastTs) {
     lastTs = expiryTime;
   }
-  const HOUR_MS = 3600 * 1000;
 
   const bars: BarData[] = [];
   let lastIv = 15;
-  let lastPrice = 6000; // fallback price
+  let lastPrice = sortedUnderlying[0].underlying_price;
+  let dataIdx = 0;
 
   for (let t = firstTs; t <= lastTs; t += HOUR_MS) {
     // Generate lookup key in same format as JSON data: "2026-01-01 23:00:00+00:00"
     const tsKey = new Date(t).toISOString().replace('T', ' ').replace('Z', '+00:00').replace(/\.\d{3}/, '');
 
-    // Forward-fill underlying price
-    const rawPrice = priceByTs.get(tsKey);
-    if (rawPrice !== undefined) {
-      lastPrice = rawPrice;
+    // Forward-fill underlying price from sorted data
+    while (
+      dataIdx + 1 < sortedUnderlying.length &&
+      new Date(sortedUnderlying[dataIdx + 1].ts_event).getTime() <= t
+    ) {
+      dataIdx++;
+    }
+    const row = sortedUnderlying[dataIdx];
+    if (row && new Date(row.ts_event).getTime() <= t) {
+      lastPrice = row.underlying_price;
     }
 
     const S = lastPrice;

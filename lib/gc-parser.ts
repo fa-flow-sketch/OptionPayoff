@@ -164,54 +164,40 @@ export function parseGCData(
     optsByTs.get(opt.ts_event)!.push(opt);
   }
 
-  // Build price + IV lookup from underlying
-  const priceByTs = new Map<string, number>();
-  const ivByTs = new Map<string, number>();
-  let lastPrice = 2600;
-  let lastIv = 15;
+  // Sort underlying data by timestamp for forward-fill iteration
+  const sortedUnderlying = [...underlying].sort((a, b) =>
+    new Date(a.ts_event).getTime() - new Date(b.ts_event).getTime()
+  );
 
-  for (const row of underlying) {
-    priceByTs.set(row.ts_event, row.underlying_price);
-    ivByTs.set(row.ts_event, row.iv);
-    lastPrice = row.underlying_price;
-    lastIv = row.iv;
-  }
-
-  // Sort all timestamps
-  const allTimestamps = [...new Set([
-    ...underlying.map(r => r.ts_event),
-    ...options.map(o => o.ts_event),
-  ])].sort();
-
-  if (allTimestamps.length === 0) return [];
+  if (sortedUnderlying.length === 0) return [];
 
   const expiryDate = GC_EXPIRY[contract];
   const expiryTime = expiryDate ? new Date(expiryDate + 'T23:59:59Z').getTime() : null;
 
-  // Generate continuous hourly timeline, truncated at contract expiry
-  const firstTs = new Date(allTimestamps[0]).getTime();
-  let lastTs = new Date(allTimestamps[allTimestamps.length - 1]).getTime();
+  const HOUR_MS = 3600 * 1000;
+  const firstTs = new Date(sortedUnderlying[0].ts_event).getTime();
+  let lastTs = new Date(sortedUnderlying[sortedUnderlying.length - 1].ts_event).getTime();
   if (expiryTime && expiryTime < lastTs) {
     lastTs = expiryTime;
   }
-  const HOUR_MS = 3600 * 1000;
 
   const bars: BarData[] = [];
+  let dataIdx = 0;
+  let lastPrice = sortedUnderlying[0].underlying_price;
+  let lastIv = sortedUnderlying[0].iv;
 
   for (let t = firstTs; t <= lastTs; t += HOUR_MS) {
-    // Generate lookup key matching JSON format: "2026-01-01 23:00:00+00:00"
-    const tsKey = new Date(t).toISOString().replace('T', ' ').replace('Z', '+00:00').replace(/\.\d{3}/, '');
-
-    // Use pre-computed IV from underlying JSON, or forward-fill
-    const rawIv = ivByTs.get(tsKey);
-    if (rawIv !== undefined) {
-      lastIv = rawIv;
+    // Advance to the most recent data point at or before this bar time
+    while (
+      dataIdx + 1 < sortedUnderlying.length &&
+      new Date(sortedUnderlying[dataIdx + 1].ts_event).getTime() <= t
+    ) {
+      dataIdx++;
     }
-
-    // Use pre-computed underlying price, or forward-fill
-    const rawPrice = priceByTs.get(tsKey);
-    if (rawPrice !== undefined) {
-      lastPrice = rawPrice;
+    const row = sortedUnderlying[dataIdx];
+    if (row && new Date(row.ts_event).getTime() <= t) {
+      lastPrice = row.underlying_price;
+      lastIv = row.iv;
     }
 
     bars.push({

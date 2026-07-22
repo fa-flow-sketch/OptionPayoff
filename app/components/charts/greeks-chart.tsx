@@ -25,7 +25,7 @@ export default function GreeksChart({ bars }: { bars: BarResult[] }) {
 
   const data = useMemo(() => {
     return (bars ?? []).filter((_: BarResult, i: number) => i % 3 === 0).map((b: BarResult) => ({
-      time: b?.datetime?.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }) ?? '',
+      time: b?.datetime?.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) ?? '',
       delta: Number(b?.effectiveDelta?.toFixed?.(3) ?? 0),
       gamma: Number(((b?.netGamma ?? 0) * 1000)?.toFixed?.(3) ?? 0),
       theta: Number(b?.netTheta?.toFixed?.(2) ?? 0),

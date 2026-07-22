@@ -5,7 +5,7 @@ import { type BarResult } from '@/lib/simulator';
 
 export default function PriceChart({ bars }: { bars: BarResult[] }) {
   const data = (bars ?? []).filter((_: BarResult, i: number) => i % 3 === 0).map((b: BarResult) => ({
-    time: b?.datetime?.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }) ?? '',
+    time: b?.datetime?.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) ?? '',
     close: b?.close ?? 0,
   }));
 

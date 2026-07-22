@@ -21,7 +21,7 @@ export default function DataPreview({ bars }: { bars: BarData[] }) {
           <tbody>
             {preview.map((b: BarData, i: number) => (
               <tr key={i} className="border-t border-border/30">
-                <td className="py-1 pr-2 text-muted-foreground">{b?.time?.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }) ?? 'N/A'}</td>
+                <td className="py-1 pr-2 text-muted-foreground">{b?.time?.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) ?? 'N/A'}</td>
                 <td className="text-right py-1 pr-2">{b?.close?.toFixed?.(1) ?? '0'}</td>
                 <td className="text-right py-1">{b?.vix?.toFixed?.(1) ?? '0'}</td>
               </tr>
