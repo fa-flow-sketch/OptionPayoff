@@ -185,7 +185,7 @@ export function runSimulation(
     if (!bar) continue;
     const S = bar.close;
     const sigma = params.ivOverride !== null ? params.ivOverride : (bar.vix / 100);
-    const hoursElapsed = i; // each bar is 1 hour
+    const daysElapsed = i; // each bar is 1 day
 
     // Reset daily hedge counter
     const dayStr = bar.time.toISOString().slice(0, 10);
@@ -203,7 +203,7 @@ export function runSimulation(
     for (let j = 0; j < legs.length; j++) {
       const leg = legs[j];
       if (!leg) continue;
-      const T = Math.max((leg.dte - hoursElapsed / 24) / 365, 0);
+      const T = Math.max((leg.dte - daysElapsed) / 365, 0);
       const posSign = leg.position === 'long' ? 1 : -1;
       const qty = leg.quantity;
 
@@ -231,8 +231,8 @@ export function runSimulation(
       currentOptionValue += posSign * qty * mult * legPrice;
     }
 
-    // netTheta is daily rate — divide by 24 for hourly accumulation
-    cumulativeThetaDecay += netTheta / 24;
+    // netTheta is daily rate, each bar is 1 day
+    cumulativeThetaDecay += netTheta;
 
     // Option P&L: premium collected + current position value
     const optionPnl = premiumCollected + currentOptionValue;
@@ -368,11 +368,11 @@ export function runSimulation(
   // Compute per-leg P&L at the final bar
   const lastPrice = lastBar?.close ?? entryPrice;
   const lastFallbackSigma = params.ivOverride !== null ? params.ivOverride : ((simBars[simBars.length - 1]?.vix ?? 15) / 100);
-  const totalHoursElapsed = simBars.length - 1;
+  const totalDaysElapsed = simBars.length - 1;
   const lastBarTime = simBars[simBars.length - 1]?.time ?? new Date();
   const legPnls: LegPnl[] = legs.map((leg, j) => {
     const posSign = leg.position === 'long' ? 1 : -1;
-    const T = Math.max((leg.dte - totalHoursElapsed / 24) / 365, 0);
+    const T = Math.max((leg.dte - totalDaysElapsed) / 365, 0);
     const entryVal = legEntryValues[j] ?? 0;
     // Use volatility surface at the last bar for current value
     let currentVal: number;

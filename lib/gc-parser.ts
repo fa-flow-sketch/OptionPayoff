@@ -157,57 +157,56 @@ export function parseGCData(
   contract: string,
   rfr: number = 0.05
 ): BarData[] {
-  // Index options by timestamp
-  const optsByTs = new Map<string, OptionRow[]>();
-  for (const opt of options) {
-    if (!optsByTs.has(opt.ts_event)) optsByTs.set(opt.ts_event, []);
-    optsByTs.get(opt.ts_event)!.push(opt);
-  }
-
-  // Sort underlying data by timestamp for forward-fill iteration
+  // Sort underlying data by timestamp
   const sortedUnderlying = [...underlying].sort((a, b) =>
     new Date(a.ts_event).getTime() - new Date(b.ts_event).getTime()
   );
 
   if (sortedUnderlying.length === 0) return [];
 
-  const expiryDate = GC_EXPIRY[contract];
-  const expiryTime = expiryDate ? new Date(expiryDate + 'T23:59:59Z').getTime() : null;
-
-  const HOUR_MS = 3600 * 1000;
-  const firstTs = new Date(sortedUnderlying[0].ts_event).getTime();
-  let lastTs = new Date(sortedUnderlying[sortedUnderlying.length - 1].ts_event).getTime();
-  if (expiryTime && expiryTime < lastTs) {
-    lastTs = expiryTime;
+  // Group by date (YYYY-MM-DD), keeping the last (closing) price/IV per day
+  const dailyLast = new Map<string, { price: number; iv: number }>();
+  for (const row of sortedUnderlying) {
+    const dateKey = row.ts_event.slice(0, 10);
+    dailyLast.set(dateKey, { price: row.underlying_price, iv: row.iv });
   }
 
-  const bars: BarData[] = [];
-  let dataIdx = 0;
-  let lastPrice = sortedUnderlying[0].underlying_price;
-  let lastIv = sortedUnderlying[0].iv;
+  // Get date range
+  const allDates = [...dailyLast.keys()].sort();
+  const firstDate = allDates[0];
+  const lastDate = allDates[allDates.length - 1];
 
-  for (let t = firstTs; t <= lastTs; t += HOUR_MS) {
-    // Advance to the most recent data point at or before this bar time
-    while (
-      dataIdx + 1 < sortedUnderlying.length &&
-      new Date(sortedUnderlying[dataIdx + 1].ts_event).getTime() <= t
-    ) {
-      dataIdx++;
+  const expiryDate = GC_EXPIRY[contract];
+  const expiryStr = expiryDate ?? '9999-12-31';
+
+  const bars: BarData[] = [];
+  let lastPrice = dailyLast.get(firstDate)?.price ?? 2600;
+  let lastIv = dailyLast.get(firstDate)?.iv ?? 15;
+
+  // Generate one bar per calendar day
+  const start = new Date(firstDate + 'T00:00:00Z');
+  const end = new Date((expiryStr < lastDate ? expiryStr : lastDate) + 'T00:00:00Z');
+
+  for (let t = start.getTime(); t <= end.getTime(); t += 86400_000) {
+    const dateKey = new Date(t).toISOString().slice(0, 10);
+
+    // Stop at contract expiry
+    if (dateKey > expiryStr) break;
+
+    const dayData = dailyLast.get(dateKey);
+    if (dayData) {
+      lastPrice = dayData.price;
+      lastIv = dayData.iv;
     }
-    const row = sortedUnderlying[dataIdx];
-    if (row && new Date(row.ts_event).getTime() <= t) {
-      lastPrice = row.underlying_price;
-      lastIv = row.iv;
-    }
+    // else forward-fill from previous day
 
     bars.push({
-      time: new Date(t),
-      timestamp: Math.floor(t / 1000),
+      time: new Date(dateKey + 'T00:00:00Z'),
+      timestamp: Math.floor(new Date(dateKey + 'T00:00:00Z').getTime() / 1000),
       close: lastPrice,
       vix: lastIv,
     });
   }
 
-  bars.sort((a, b) => a.timestamp - b.timestamp);
   return bars;
 }

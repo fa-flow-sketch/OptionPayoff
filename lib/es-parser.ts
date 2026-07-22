@@ -90,69 +90,65 @@ export function parseESData(
   contract: string,
   rfr: number = 0.05
 ): BarData[] {
-  // Normalize date format: some JSON has space-separated dates ("2026-01-01 23:00:00+00:00")
-  function normTs(ts: string): string {
-    return ts.replace('T', ' ').replace(/\.\d{3}Z/, '+00:00').replace(/\.\d{3}\+/, '+');
-  }
-
-  // Index options by timestamp for fast lookup
-  const optsByTs = new Map<string, OptionRow[]>();
-  for (const opt of options) {
-    const ts = normTs(opt.ts_event);
-    if (!optsByTs.has(ts)) optsByTs.set(ts, []);
-    optsByTs.get(ts)!.push(opt);
-  }
-
-  // Sort underlying data by timestamp for forward-fill iteration
+  // Sort underlying by timestamp
   const sortedUnderlying = [...underlying].sort((a, b) =>
     new Date(a.ts_event).getTime() - new Date(b.ts_event).getTime()
   );
 
   if (sortedUnderlying.length === 0) return [];
 
-  // Get expiry date for the selected contract
-  const expiryDate = ES_EXPIRY[contract];
-  const expiryTime = expiryDate ? new Date(expiryDate + 'T23:59:59Z').getTime() : null;
-
-  const HOUR_MS = 3600 * 1000;
-  const firstTs = new Date(sortedUnderlying[0].ts_event).getTime();
-  let lastTs = new Date(sortedUnderlying[sortedUnderlying.length - 1].ts_event).getTime();
-  if (expiryTime && expiryTime < lastTs) {
-    lastTs = expiryTime;
+  // Group underlying by date: keep last (closing) price per day
+  const dailyPrice = new Map<string, number>();
+  for (const row of sortedUnderlying) {
+    const dateKey = row.ts_event.slice(0, 10);
+    dailyPrice.set(dateKey, row.underlying_price);
   }
 
+  // Group options by date
+  const dailyOpts = new Map<string, OptionRow[]>();
+  for (const opt of options) {
+    const dateKey = opt.ts_event.slice(0, 10);
+    if (!dailyOpts.has(dateKey)) dailyOpts.set(dateKey, []);
+    dailyOpts.get(dateKey)!.push(opt);
+  }
+
+  // Get date range
+  const allDates = [...new Set([...dailyPrice.keys(), ...dailyOpts.keys()])].sort();
+  if (allDates.length === 0) return [];
+
+  const firstDate = allDates[0];
+  const lastDate = allDates[allDates.length - 1];
+
+  const expiryDate = ES_EXPIRY[contract];
+  const expiryStr = expiryDate ?? '9999-12-31';
+
   const bars: BarData[] = [];
+  let lastPrice = dailyPrice.get(firstDate) ?? 6000;
   let lastIv = 15;
-  let lastPrice = sortedUnderlying[0].underlying_price;
-  let dataIdx = 0;
 
-  for (let t = firstTs; t <= lastTs; t += HOUR_MS) {
-    // Generate lookup key in same format as JSON data: "2026-01-01 23:00:00+00:00"
-    const tsKey = new Date(t).toISOString().replace('T', ' ').replace('Z', '+00:00').replace(/\.\d{3}/, '');
+  const start = new Date(firstDate + 'T00:00:00Z');
+  const end = new Date((expiryStr < lastDate ? expiryStr : lastDate) + 'T00:00:00Z');
 
-    // Forward-fill underlying price from sorted data
-    while (
-      dataIdx + 1 < sortedUnderlying.length &&
-      new Date(sortedUnderlying[dataIdx + 1].ts_event).getTime() <= t
-    ) {
-      dataIdx++;
-    }
-    const row = sortedUnderlying[dataIdx];
-    if (row && new Date(row.ts_event).getTime() <= t) {
-      lastPrice = row.underlying_price;
-    }
+  for (let t = start.getTime(); t <= end.getTime(); t += 86400_000) {
+    const dateKey = new Date(t).toISOString().slice(0, 10);
 
-    const S = lastPrice;
-    const opts = optsByTs.get(tsKey) ?? [];
+    // Stop at contract expiry
+    if (dateKey > expiryStr) break;
 
-    // Compute IV from ATM options
-    let iv = lastIv;
-    if (opts.length > 0 && expiryTime) {
+    // Underlying price: use day's last, or forward-fill
+    const dayPrice = dailyPrice.get(dateKey);
+    if (dayPrice !== undefined) lastPrice = dayPrice;
+
+    // ATM IV: compute from day's options, or forward-fill
+    const dayOpts = dailyOpts.get(dateKey);
+    if (dayOpts && dayOpts.length > 0 && expiryDate) {
+      const S = lastPrice;
+      const expiryTime = new Date(expiryDate + 'T23:59:59Z').getTime();
       const T = Math.max((expiryTime - t) / (365 * 24 * 3600 * 1000), 0.001);
 
       let bestOpt: OptionRow | null = null;
       let bestDist = Infinity;
-      for (const opt of opts) {
+      for (const opt of dayOpts) {
         const dist = Math.abs(opt.strike - S);
         if (dist < bestDist) {
           bestDist = dist;
@@ -164,20 +160,18 @@ export function parseESData(
         const optType = bestOpt.option_type as 'call' | 'put';
         const sigma = bsIv(bestOpt.close, S, bestOpt.strike, T, rfr, optType);
         if (sigma !== null && sigma > 0.001 && sigma < 5.0) {
-          iv = sigma * 100;
-          lastIv = iv;
+          lastIv = sigma * 100;
         }
       }
     }
 
     bars.push({
-      time: new Date(t),
-      timestamp: Math.floor(t / 1000),
-      close: S,
-      vix: iv,
+      time: new Date(dateKey + 'T00:00:00Z'),
+      timestamp: Math.floor(new Date(dateKey + 'T00:00:00Z').getTime() / 1000),
+      close: lastPrice,
+      vix: lastIv,
     });
   }
 
-  bars.sort((a, b) => a.timestamp - b.timestamp);
   return bars;
 }
