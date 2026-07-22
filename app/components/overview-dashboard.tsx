@@ -101,6 +101,18 @@ export default function OverviewDashboard({ result, contractSpec = CONTRACT_SPEC
         </div>
       </div>
 
+      {/* Pricing Source Breakdown */}
+      {r.pricingSources && (r.pricingSources.exact + r.pricingSources.interpolated + r.pricingSources.fallback) > 0 && (
+        <div className="rounded-xl bg-muted/20 border border-border/50 p-3 mb-6">
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-muted-foreground">Option Pricing Source:</span>
+            <span className="font-mono text-green-400">{r.pricingSources.exact.toLocaleString()} exact</span>
+            <span className="font-mono text-blue-400">{r.pricingSources.interpolated.toLocaleString()} interpolated</span>
+            <span className="font-mono text-muted-foreground">{r.pricingSources.fallback.toLocaleString()} fallback (ATM IV)</span>
+          </div>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard

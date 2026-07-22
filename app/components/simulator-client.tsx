@@ -7,6 +7,7 @@ import { CONTRACT_SPECS, type ContractSpec } from '@/lib/contract-specs';
 import { fetchESUnderlying, fetchESOptions, parseESData, ALL_ES_CONTRACTS } from '@/lib/es-parser';
 import { fetchGCUnderlying, fetchGCOptions, parseGCData as parseGCJsonData, ALL_GC_CONTRACTS } from '@/lib/gc-parser';
 import { fetchHSIUnderlying, fetchHSIOptions, parseHSIData, fetchVHSI, hasVHSICoverage, ALL_HSI_CONTRACTS } from '@/lib/hsi-parser';
+import { buildOptionsLookup, type OptionQuote } from '@/lib/volatility-surface';
 import LegBuilder from './leg-builder';
 import GlobalParams from './global-params';
 import ResultsTabs from './results-tabs';
@@ -75,6 +76,7 @@ export default function SimulatorClient() {
   const [hsiContract, setHsiContract] = useState('HSI26H');
   const [hsiLoading, setHsiLoading] = useState(false);
   const [hsiIvSource, setHsiIvSource] = useState<'bs' | 'vhsi'>('bs');
+  const [optionsData, setOptionsData] = useState<OptionQuote[]>([]);
 
   // Load GC Parquet data on mount and when contract changes
   useEffect(() => {
@@ -88,6 +90,7 @@ export default function SimulatorClient() {
       fetchGCOptions(gcContract),
     ])
       .then(([underlying, options]) => {
+        setOptionsData(options);
         const parsed = parseGCJsonData(underlying, options, gcContract, params.riskFreeRate);
         if (parsed.length > 0) {
           setBars(parsed);
@@ -127,6 +130,7 @@ export default function SimulatorClient() {
       fetchESOptions(esContract),
     ])
       .then(([underlying, options]) => {
+        setOptionsData(options);
         const parsed = parseESData(underlying, options, esContract, params.riskFreeRate);
         if (parsed.length > 0) {
           setBars(parsed);
@@ -173,6 +177,7 @@ export default function SimulatorClient() {
       .then((results) => {
         const underlying = results[0];
         const options = results[1];
+        setOptionsData(options as OptionQuote[]);
         const vhsiMap = hsiIvSource === 'vhsi' ? results[2] : null;
         const parsed = parseHSIData(underlying, options, hsiContract, params.riskFreeRate, vhsiMap);
         if (vhsiMap) {
@@ -256,7 +261,8 @@ export default function SimulatorClient() {
     setIsRunning(true);
     setTimeout(() => {
       try {
-        const result = runSimulation(filteredBars, legs, params);
+        const optsByTs = optionsData.length > 0 ? buildOptionsLookup(optionsData) : undefined;
+        const result = runSimulation(filteredBars, legs, params, optsByTs);
         setSimResult(result);
         toast.success(`Simulation complete — ${filteredBars.length} bars`);
       } catch (err: any) {
@@ -328,7 +334,7 @@ export default function SimulatorClient() {
               {/* Data Source Toggle */}
               <div className="grid grid-cols-3 gap-1 mb-3">
                 <button
-                  onClick={() => setDataSource('gc_json')}
+                  onClick={() => { setDataSource('gc_json'); setOptionsData([]); }}
                   className={`px-3 py-2 rounded-lg text-[11px] font-semibold transition-all border ${
                     dataSource === 'gc_json'
                       ? 'bg-[#F5A623]/15 border-[#F5A623]/50 text-[#F5A623]'
@@ -338,7 +344,7 @@ export default function SimulatorClient() {
                   GC
                 </button>
                 <button
-                  onClick={() => setDataSource('es_json')}
+                  onClick={() => { setDataSource('es_json'); setOptionsData([]); }}
                   className={`px-3 py-2 rounded-lg text-[11px] font-semibold transition-all border ${
                     dataSource === 'es_json'
                       ? 'bg-[#F5A623]/15 border-[#F5A623]/50 text-[#F5A623]'
@@ -348,7 +354,7 @@ export default function SimulatorClient() {
                   ES
                 </button>
                 <button
-                  onClick={() => setDataSource('hsi_json')}
+                  onClick={() => { setDataSource('hsi_json'); setOptionsData([]); }}
                   className={`px-3 py-2 rounded-lg text-[11px] font-semibold transition-all border ${
                     dataSource === 'hsi_json'
                       ? 'bg-[#F5A623]/15 border-[#F5A623]/50 text-[#F5A623]'

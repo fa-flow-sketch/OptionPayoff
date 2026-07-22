@@ -1,6 +1,7 @@
-import { bsPrice, type BSResult } from './black-scholes';
+import { bsPrice, bsIv, type BSResult } from './black-scholes';
 import type { BarData } from './csv-parser';
 import { type ContractSpec, CONTRACT_SPECS } from './contract-specs';
+import { getLegPricing, type OptionQuote, type LegPricing, type PricingSourceStats } from './volatility-surface';
 
 export interface Leg {
   id: string;
@@ -90,6 +91,7 @@ export interface SimResult {
   tpBar: number | null; // bar index where TP fired
   tpTime: Date | null; // datetime when TP fired
   tpPnl: number | null; // net P&L at TP
+  pricingSources: PricingSourceStats; // how many leg-bar pairs used each source
 }
 
 interface HedgeTrade {
@@ -101,7 +103,8 @@ interface HedgeTrade {
 export function runSimulation(
   bars: BarData[],
   legs: Leg[],
-  params: SimParams
+  params: SimParams,
+  optionsByTs?: Map<string, OptionQuote[]>,
 ): SimResult {
   const startIdx = Math.max(0, Math.min(params.entryBar, bars.length - 1));
   const simBars = bars.slice(startIdx);
@@ -124,6 +127,7 @@ export function runSimulation(
       tpBar: null,
       tpTime: null,
       tpPnl: null,
+      pricingSources: { exact: 0, interpolated: 0, fallback: 0 },
     };
   }
 
@@ -140,20 +144,27 @@ export function runSimulation(
   let numHedges = 0;
   let cumulativeMgcContracts = 0;
 
+  // Pricing source counters for transparency
+  const pricingSources: PricingSourceStats = { exact: 0, interpolated: 0, fallback: 0 };
+
   // Compute initial option values for premium calculation
   const entryPrice = simBars[0]?.close ?? 0;
-  const entryIV = params.ivOverride !== null ? params.ivOverride : ((simBars[0]?.vix ?? 15) / 100);
+  const fallbackSigma = params.ivOverride !== null ? params.ivOverride : ((simBars[0]?.vix ?? 15) / 100);
 
   let premiumCollected = 0;
   const legEntryValues: number[] = [];
+  const legEntryIv: number[] = [];
 
   for (const leg of legs) {
     const T0 = leg.dte / 365;
-    const bs0 = bsPrice(entryPrice, leg.strike, T0, r, entryIV, leg.type);
+    const pricing = optionsByTs
+      ? getLegPricing(optionsByTs, simBars[0]?.time ?? new Date(), entryPrice, leg.strike, T0, r, leg.type, fallbackSigma)
+      : { price: bsPrice(entryPrice, leg.strike, T0, r, fallbackSigma, leg.type).price, iv: fallbackSigma, source: 'fallback' as const };
     const posSign = leg.position === 'long' ? 1 : -1;
     // Short = collect premium (positive), Long = pay premium (negative)
-    premiumCollected += -posSign * leg.quantity * mult * bs0.price;
-    legEntryValues.push(bs0.price);
+    premiumCollected += -posSign * leg.quantity * mult * pricing.price;
+    legEntryValues.push(pricing.price);
+    legEntryIv.push(pricing.iv);
   }
 
   let cumulativeThetaDecay = 0;
@@ -193,16 +204,31 @@ export function runSimulation(
       const leg = legs[j];
       if (!leg) continue;
       const T = Math.max((leg.dte - hoursElapsed / 24) / 365, 0);
-      const bs = bsPrice(S, leg.strike, T, r, sigma, leg.type);
       const posSign = leg.position === 'long' ? 1 : -1;
       const qty = leg.quantity;
 
-      netDelta += posSign * qty * bs.delta; // in GC-contract delta units
+      // Get per-leg pricing via volatility surface when options data is available
+      let legPrice: number;
+      let legSigma: number;
+      if (optionsByTs) {
+        const pricing = getLegPricing(optionsByTs, bar.time, S, leg.strike, T, r, leg.type, sigma);
+        legPrice = pricing.price;
+        legSigma = pricing.iv;
+        pricingSources[pricing.source]++;
+      } else {
+        legPrice = bsPrice(S, leg.strike, T, r, sigma, leg.type).price;
+        legSigma = sigma;
+        pricingSources.fallback++;
+      }
+
+      const bs = bsPrice(S, leg.strike, T, r, legSigma, leg.type);
+
+      netDelta += posSign * qty * bs.delta;
       netGamma += posSign * qty * bs.gamma;
       netVega += posSign * qty * bs.vega;
-      netTheta += posSign * qty * bs.theta * mult; // per contract
+      netTheta += posSign * qty * bs.theta * mult;
 
-      currentOptionValue += posSign * qty * mult * bs.price;
+      currentOptionValue += posSign * qty * mult * legPrice;
     }
 
     // netTheta is daily rate — divide by 24 for hourly accumulation
@@ -341,21 +367,23 @@ export function runSimulation(
 
   // Compute per-leg P&L at the final bar
   const lastPrice = lastBar?.close ?? entryPrice;
-  const lastSigma = params.ivOverride !== null ? params.ivOverride : ((simBars[simBars.length - 1]?.vix ?? 15) / 100);
+  const lastFallbackSigma = params.ivOverride !== null ? params.ivOverride : ((simBars[simBars.length - 1]?.vix ?? 15) / 100);
   const totalHoursElapsed = simBars.length - 1;
+  const lastBarTime = simBars[simBars.length - 1]?.time ?? new Date();
   const legPnls: LegPnl[] = legs.map((leg, j) => {
     const posSign = leg.position === 'long' ? 1 : -1;
     const T = Math.max((leg.dte - totalHoursElapsed / 24) / 365, 0);
-    const bsCurrent = bsPrice(lastPrice, leg.strike, T, r, lastSigma, leg.type);
     const entryVal = legEntryValues[j] ?? 0;
-    const currentVal = bsCurrent.price;
+    // Use volatility surface at the last bar for current value
+    let currentVal: number;
+    if (optionsByTs) {
+      const pricing = getLegPricing(optionsByTs, lastBarTime, lastPrice, leg.strike, T, r, leg.type, lastFallbackSigma);
+      currentVal = pricing.price;
+    } else {
+      currentVal = bsPrice(lastPrice, leg.strike, T, r, lastFallbackSigma, leg.type).price;
+    }
     // Premium: short collects (positive), long pays (negative)
     const legPremium = -posSign * leg.quantity * mult * entryVal;
-    // P&L: for short, profit = (entryVal - currentVal) * qty * 100
-    //       for long, profit = (currentVal - entryVal) * qty * 100
-    const legPnl = posSign * leg.quantity * mult * (currentVal - entryVal);
-    // But from P&L perspective: premium + current position value
-    // short: premium is positive, currentVal makes position negative → pnl = premium - currentVal*qty*100
     const pnl = legPremium + posSign * leg.quantity * mult * currentVal;
     return {
       legLabel: `${leg.position === 'short' ? 'Short' : 'Long'} ${leg.type === 'call' ? 'Call' : 'Put'} ${leg.strike}`,
@@ -403,6 +431,7 @@ export function runSimulation(
     tpBar,
     tpTime,
     tpPnl,
+    pricingSources,
   };
 }
 
@@ -412,14 +441,15 @@ export function runSensitivityMatrix(
   legs: Leg[],
   baseParams: SimParams,
   bands: number[],
-  maxHedgesArr: number[]
+  maxHedgesArr: number[],
+  optionsByTs?: Map<string, OptionQuote[]>,
 ): number[][] {
   const matrix: number[][] = [];
   for (const band of bands) {
     const row: number[] = [];
     for (const maxH of maxHedgesArr) {
       const p = { ...baseParams, deltaBand: band, maxHedgesPerDay: maxH };
-      const result = runSimulation(bars, legs, p);
+      const result = runSimulation(bars, legs, p, optionsByTs);
       row.push(result.finalNetPnl);
     }
     matrix.push(row);
