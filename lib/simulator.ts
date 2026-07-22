@@ -25,8 +25,8 @@ export interface SimParams {
   hedgeScheduledTimes: string[]; // e.g. ['13:30','15:00'] — for scheduled mode
   hedgeIntervalHours: number; // e.g. 1 — for interval mode
   takeProfitPct: number | null; // e.g. 0.50 = TP at 50% of premium. null = disabled
-  stopHedgeDeltaLo: number; // e.g. -0.30 — don't hedge if delta > this
-  stopHedgeDeltaHi: number; // e.g. 0.30  — don't hedge if delta < this
+  stopHedgeDeltaLo: number | null; // e.g. -0.05 — don't hedge if delta above this AND below stopHedgeDeltaHi. null = disabled
+  stopHedgeDeltaHi: number | null; // e.g. 0.05  — don't hedge if delta below this AND above stopHedgeDeltaLo
   stopHedgeTime: string | null; // e.g. "14:00" (UTC) — no hedging after this time. null = disabled
   contractSpec: ContractSpec; // GC or ES — determines multipliers, defaults to GC
 }
@@ -263,8 +263,10 @@ export function runSimulation(
       hedgeEligible = i % intervalBars === 0;
     }
 
-    // Stop-hedge delta range: skip hedging if delta is within the safe range
-    const deltaInSafeZone = effectiveDelta >= (params.stopHedgeDeltaLo ?? -999) && effectiveDelta <= (params.stopHedgeDeltaHi ?? 999);
+    // Stop-hedge delta range: if set, skip hedging when delta is within the safe zone
+    // Only active when BOTH values are non-null (explicitly configured)
+    const stopHedgeActive = params.stopHedgeDeltaLo !== null && params.stopHedgeDeltaHi !== null;
+    const deltaInSafeZone = stopHedgeActive && effectiveDelta >= params.stopHedgeDeltaLo! && effectiveDelta <= params.stopHedgeDeltaHi!;
 
     // Stop-hedge time: skip hedging if current bar time >= stop time
     let pastStopTime = false;

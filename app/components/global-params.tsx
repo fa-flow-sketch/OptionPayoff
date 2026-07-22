@@ -159,25 +159,34 @@ export default function GlobalParams({ params, setParams, maxBars, contractSpec 
             <label className="text-xs text-muted-foreground flex items-center gap-1">
               <Shield className="w-3 h-3 text-blue-400" />
               No-Hedge Δ Range
+              <span className="text-[10px] text-muted-foreground/60">(blank=off)</span>
             </label>
             <div className="flex items-center gap-1">
               <input
                 type="number"
-                value={params?.stopHedgeDeltaLo ?? -0.30}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => update('stopHedgeDeltaLo', parseFloat(e.target.value) || -0.30)}
-                className="w-full bg-secondary text-xs font-mono rounded-lg px-2 py-2 border-0 outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="Off"
+                value={params?.stopHedgeDeltaLo ?? ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const val = e.target.value;
+                  update('stopHedgeDeltaLo', val === '' ? null : parseFloat(val));
+                }}
+                className="w-full bg-secondary text-xs font-mono rounded-lg px-2 py-2 border-0 outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 step={0.05}
               />
               <span className="text-muted-foreground text-[10px]">↔</span>
               <input
                 type="number"
-                value={params?.stopHedgeDeltaHi ?? 0.30}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => update('stopHedgeDeltaHi', parseFloat(e.target.value) || 0.30)}
-                className="w-full bg-secondary text-xs font-mono rounded-lg px-2 py-2 border-0 outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="Off"
+                value={params?.stopHedgeDeltaHi ?? ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const val = e.target.value;
+                  update('stopHedgeDeltaHi', val === '' ? null : parseFloat(val));
+                }}
+                className="w-full bg-secondary text-xs font-mono rounded-lg px-2 py-2 border-0 outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 step={0.05}
               />
             </div>
-            <p className="text-[9px] text-muted-foreground/60 mt-0.5">Skip hedging if Δ within this range</p>
+            <p className="text-[9px] text-muted-foreground/60 mt-0.5">If set, skip hedging when Δ is within this range (even if {'>'} band)</p>
           </div>
           {/* Stop Hedge Time */}
           <div>

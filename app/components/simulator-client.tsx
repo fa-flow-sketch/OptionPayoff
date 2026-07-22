@@ -59,8 +59,8 @@ export default function SimulatorClient() {
     hedgeScheduledTimes: ['13:30'],
     hedgeIntervalHours: 1,
     takeProfitPct: null,
-    stopHedgeDeltaLo: -0.30,
-    stopHedgeDeltaHi: 0.30,
+    stopHedgeDeltaLo: null,
+    stopHedgeDeltaHi: null,
     stopHedgeTime: null,
     contractSpec: CONTRACT_SPECS.GC,
   });
