@@ -97,58 +97,41 @@ export function parseESData(
 
   if (sortedUnderlying.length === 0) return [];
 
-  // Group underlying by date: keep last (closing) price per day
-  const dailyPrice = new Map<string, number>();
-  for (const row of sortedUnderlying) {
-    const dateKey = row.ts_event.slice(0, 10);
-    dailyPrice.set(dateKey, row.underlying_price);
+  // Index options by exact timestamp for fast lookup
+  function normTs(ts: string): string {
+    return ts.replace('T', ' ').replace(/\.\d{3}Z/, '+00:00').replace(/\.\d{3}\+/, '+');
   }
-
-  // Group options by date
-  const dailyOpts = new Map<string, OptionRow[]>();
+  const optsByTs = new Map<string, OptionRow[]>();
   for (const opt of options) {
-    const dateKey = opt.ts_event.slice(0, 10);
-    if (!dailyOpts.has(dateKey)) dailyOpts.set(dateKey, []);
-    dailyOpts.get(dateKey)!.push(opt);
+    const ts = normTs(opt.ts_event);
+    if (!optsByTs.has(ts)) optsByTs.set(ts, []);
+    optsByTs.get(ts)!.push(opt);
   }
-
-  // Get date range
-  const allDates = [...new Set([...dailyPrice.keys(), ...dailyOpts.keys()])].sort();
-  if (allDates.length === 0) return [];
-
-  const firstDate = allDates[0];
-  const lastDate = allDates[allDates.length - 1];
 
   const expiryDate = ES_EXPIRY[contract];
   const expiryStr = expiryDate ?? '9999-12-31';
+  const expiryTime = expiryDate ? new Date(expiryDate + 'T23:59:59Z').getTime() : null;
 
   const bars: BarData[] = [];
-  let lastPrice = dailyPrice.get(firstDate) ?? 6000;
   let lastIv = 15;
 
-  const start = new Date(firstDate + 'T00:00:00Z');
-  const end = new Date((expiryStr < lastDate ? expiryStr : lastDate) + 'T00:00:00Z');
-
-  for (let t = start.getTime(); t <= end.getTime(); t += 86400_000) {
-    const dateKey = new Date(t).toISOString().slice(0, 10);
-
-    // Stop at contract expiry
+  for (const row of sortedUnderlying) {
+    const dateKey = row.ts_event.slice(0, 10);
     if (dateKey > expiryStr) break;
 
-    // Underlying price: use day's last, or forward-fill
-    const dayPrice = dailyPrice.get(dateKey);
-    if (dayPrice !== undefined) lastPrice = dayPrice;
+    const S = row.underlying_price;
+    const ts = new Date(row.ts_event);
+    const tsKey = normTs(row.ts_event);
 
-    // ATM IV: compute from day's options, or forward-fill
-    const dayOpts = dailyOpts.get(dateKey);
-    if (dayOpts && dayOpts.length > 0 && expiryDate) {
-      const S = lastPrice;
-      const expiryTime = new Date(expiryDate + 'T23:59:59Z').getTime();
-      const T = Math.max((expiryTime - t) / (365 * 24 * 3600 * 1000), 0.001);
+    // Compute ATM IV from options at this exact timestamp
+    let iv = lastIv;
+    const opts = optsByTs.get(tsKey) ?? [];
+    if (opts.length > 0 && expiryTime) {
+      const T = Math.max((expiryTime - ts.getTime()) / (365 * 24 * 3600 * 1000), 0.001);
 
       let bestOpt: OptionRow | null = null;
       let bestDist = Infinity;
-      for (const opt of dayOpts) {
+      for (const opt of opts) {
         const dist = Math.abs(opt.strike - S);
         if (dist < bestDist) {
           bestDist = dist;
@@ -160,16 +143,17 @@ export function parseESData(
         const optType = bestOpt.option_type as 'call' | 'put';
         const sigma = bsIv(bestOpt.close, S, bestOpt.strike, T, rfr, optType);
         if (sigma !== null && sigma > 0.001 && sigma < 5.0) {
-          lastIv = sigma * 100;
+          iv = sigma * 100;
+          lastIv = iv;
         }
       }
     }
 
     bars.push({
-      time: new Date(dateKey + 'T00:00:00Z'),
-      timestamp: Math.floor(new Date(dateKey + 'T00:00:00Z').getTime() / 1000),
-      close: lastPrice,
-      vix: lastIv,
+      time: ts,
+      timestamp: Math.floor(ts.getTime() / 1000),
+      close: S,
+      vix: iv,
     });
   }
 

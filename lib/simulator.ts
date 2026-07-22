@@ -192,7 +192,8 @@ export function runSimulation(
     if (!bar) continue;
     const S = bar.close;
     const sigma = params.ivOverride !== null ? params.ivOverride : (bar.vix / 100);
-    const daysElapsed = i; // each bar is 1 day
+    // Actual calendar days elapsed since first bar (bars can be any granularity)
+    const actualDaysElapsed = (bar.time.getTime() - simBars[0].time.getTime()) / (24 * 3600 * 1000);
 
     // Reset daily hedge counter
     const dayStr = bar.time.toISOString().slice(0, 10);
@@ -210,7 +211,7 @@ export function runSimulation(
     for (let j = 0; j < legs.length; j++) {
       const leg = legs[j];
       if (!leg) continue;
-      const T = Math.max((leg.dte - daysElapsed) / 365, 0);
+      const T = Math.max((leg.dte - actualDaysElapsed) / 365, 0);
       const posSign = leg.position === 'long' ? 1 : -1;
       const qty = leg.quantity;
 
@@ -238,8 +239,12 @@ export function runSimulation(
       currentOptionValue += posSign * qty * mult * legPrice;
     }
 
-    // netTheta is daily rate, each bar is 1 day
-    cumulativeThetaDecay += netTheta;
+    // Accumulate theta proportional to actual time since previous bar
+    if (i > 0) {
+      const prevTime = simBars[i - 1]?.time.getTime() ?? bar.time.getTime();
+      const daysSincePrevBar = (bar.time.getTime() - prevTime) / (24 * 3600 * 1000);
+      cumulativeThetaDecay += netTheta * Math.max(0, daysSincePrevBar);
+    }
 
     // Option P&L: premium collected + current position value
     const optionPnl = premiumCollected + currentOptionValue;
@@ -265,9 +270,15 @@ export function runSimulation(
       const barTimeStr = `${barHour.toString().padStart(2,'0')}:${barMinute.toString().padStart(2,'0')}`;
       hedgeEligible = params.hedgeScheduledTimes.some((t: string) => t === barTimeStr);
     } else if (params.hedgeMode === 'interval') {
-      // Check every N hours from start
-      const intervalBars = Math.max(1, params.hedgeIntervalHours);
-      hedgeEligible = i % intervalBars === 0;
+      // Check every N hours based on actual elapsed time
+      if (i === 0) {
+        hedgeEligible = true;
+      } else {
+        const startMs = simBars[0].time.getTime();
+        const prevBoundary = Math.floor((simBars[i - 1]?.time.getTime() ?? 0) / 3600000 / params.hedgeIntervalHours);
+        const curBoundary = Math.floor(bar.time.getTime() / 3600000 / params.hedgeIntervalHours);
+        hedgeEligible = curBoundary > prevBoundary;
+      }
     }
 
     // Hedge range: only allow hedging when delta is WITHIN this range.
@@ -382,11 +393,11 @@ export function runSimulation(
   // Compute per-leg P&L at the final bar
   const lastPrice = lastBar?.close ?? entryPrice;
   const lastFallbackSigma = params.ivOverride !== null ? params.ivOverride : ((simBars[simBars.length - 1]?.vix ?? 15) / 100);
-  const totalDaysElapsed = simBars.length - 1;
   const lastBarTime = simBars[simBars.length - 1]?.time ?? new Date();
+  const totalActualDays = (lastBarTime.getTime() - simBars[0].time.getTime()) / (24 * 3600 * 1000);
   const legPnls: LegPnl[] = legs.map((leg, j) => {
     const posSign = leg.position === 'long' ? 1 : -1;
-    const T = Math.max((leg.dte - totalDaysElapsed) / 365, 0);
+    const T = Math.max((leg.dte - totalActualDays) / 365, 0);
     const entryVal = legEntryValues[j] ?? 0;
     // Use volatility surface at the last bar for current value
     let currentVal: number;

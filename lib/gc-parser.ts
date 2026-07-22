@@ -157,54 +157,28 @@ export function parseGCData(
   contract: string,
   rfr: number = 0.05
 ): BarData[] {
-  // Sort underlying data by timestamp
-  const sortedUnderlying = [...underlying].sort((a, b) =>
+  // Sort by timestamp — use every data point for maximum hedge precision
+  const sorted = [...underlying].sort((a, b) =>
     new Date(a.ts_event).getTime() - new Date(b.ts_event).getTime()
   );
 
-  if (sortedUnderlying.length === 0) return [];
-
-  // Group by date (YYYY-MM-DD), keeping the last (closing) price/IV per day
-  const dailyLast = new Map<string, { price: number; iv: number }>();
-  for (const row of sortedUnderlying) {
-    const dateKey = row.ts_event.slice(0, 10);
-    dailyLast.set(dateKey, { price: row.underlying_price, iv: row.iv });
-  }
-
-  // Get date range
-  const allDates = [...dailyLast.keys()].sort();
-  const firstDate = allDates[0];
-  const lastDate = allDates[allDates.length - 1];
+  if (sorted.length === 0) return [];
 
   const expiryDate = GC_EXPIRY[contract];
   const expiryStr = expiryDate ?? '9999-12-31';
 
   const bars: BarData[] = [];
-  let lastPrice = dailyLast.get(firstDate)?.price ?? 2600;
-  let lastIv = dailyLast.get(firstDate)?.iv ?? 15;
 
-  // Generate one bar per calendar day
-  const start = new Date(firstDate + 'T00:00:00Z');
-  const end = new Date((expiryStr < lastDate ? expiryStr : lastDate) + 'T00:00:00Z');
-
-  for (let t = start.getTime(); t <= end.getTime(); t += 86400_000) {
-    const dateKey = new Date(t).toISOString().slice(0, 10);
-
-    // Stop at contract expiry
+  for (const row of sorted) {
+    const dateKey = row.ts_event.slice(0, 10);
     if (dateKey > expiryStr) break;
 
-    const dayData = dailyLast.get(dateKey);
-    if (dayData) {
-      lastPrice = dayData.price;
-      lastIv = dayData.iv;
-    }
-    // else forward-fill from previous day
-
+    const ts = new Date(row.ts_event);
     bars.push({
-      time: new Date(dateKey + 'T00:00:00Z'),
-      timestamp: Math.floor(new Date(dateKey + 'T00:00:00Z').getTime() / 1000),
-      close: lastPrice,
-      vix: lastIv,
+      time: ts,
+      timestamp: Math.floor(ts.getTime() / 1000),
+      close: row.underlying_price,
+      vix: row.iv,
     });
   }
 
