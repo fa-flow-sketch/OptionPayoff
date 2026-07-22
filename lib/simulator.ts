@@ -25,8 +25,9 @@ export interface SimParams {
   hedgeScheduledTimes: string[]; // e.g. ['13:30','15:00'] — for scheduled mode
   hedgeIntervalHours: number; // e.g. 1 — for interval mode
   takeProfitPct: number | null; // e.g. 0.50 = TP at 50% of premium. null = disabled
-  stopHedgeDeltaLo: number | null; // e.g. -0.05 — don't hedge if delta above this AND below stopHedgeDeltaHi. null = disabled
-  stopHedgeDeltaHi: number | null; // e.g. 0.05  — don't hedge if delta below this AND above stopHedgeDeltaLo
+  hedgeRangeLo: number | null; // e.g. -0.50 — only hedge if delta ABOVE this. null = no lower bound
+  hedgeRangeHi: number | null; // e.g. 0.50  — only hedge if delta BELOW this. null = no upper bound
+  // If delta ever goes OUTSIDE this range, hedging stops permanently
   stopHedgeTime: string | null; // e.g. "14:00" (UTC) — no hedging after this time. null = disabled
   contractSpec: ContractSpec; // GC or ES — determines multipliers, defaults to GC
 }
@@ -91,6 +92,8 @@ export interface SimResult {
   tpBar: number | null; // bar index where TP fired
   tpTime: Date | null; // datetime when TP fired
   tpPnl: number | null; // net P&L at TP
+  hedgingStopped: boolean; // hedging permanently stopped due to hedge range breach
+  hedgingStoppedBar: number | null; // bar index where hedging was stopped
   pricingSources: PricingSourceStats; // how many leg-bar pairs used each source
 }
 
@@ -127,6 +130,8 @@ export function runSimulation(
       tpBar: null,
       tpTime: null,
       tpPnl: null,
+      hedgingStopped: false,
+      hedgingStoppedBar: null,
       pricingSources: { exact: 0, interpolated: 0, fallback: 0 },
     };
   }
@@ -175,6 +180,8 @@ export function runSimulation(
   let tpTime: Date | null = null;
   let tpPnl: number | null = null;
   let positionClosed = false; // after TP, no more trading
+  let hedgingStopped = false; // permanently stopped due to hedge range breach
+  let hedgingStoppedBar: number | null = null;
 
   const tpTarget = params.takeProfitPct !== null && Math.abs(premiumCollected) > 0
     ? Math.abs(premiumCollected) * params.takeProfitPct
@@ -263,10 +270,15 @@ export function runSimulation(
       hedgeEligible = i % intervalBars === 0;
     }
 
-    // Stop-hedge delta range: if set, skip hedging when delta is within the safe zone
-    // Only active when BOTH values are non-null (explicitly configured)
-    const stopHedgeActive = params.stopHedgeDeltaLo !== null && params.stopHedgeDeltaHi !== null;
-    const deltaInSafeZone = stopHedgeActive && effectiveDelta >= params.stopHedgeDeltaLo! && effectiveDelta <= params.stopHedgeDeltaHi!;
+    // Hedge range: only allow hedging when delta is WITHIN this range.
+    // If delta ever goes OUTSIDE, permanently stop hedging (position is out of control).
+    const hedgeRangeActive = params.hedgeRangeLo !== null && params.hedgeRangeHi !== null;
+    const deltaInHedgeRange = !hedgeRangeActive || (effectiveDelta >= params.hedgeRangeLo! && effectiveDelta <= params.hedgeRangeHi!);
+
+    if (hedgeRangeActive && !deltaInHedgeRange && !hedgingStopped) {
+      hedgingStopped = true;
+      hedgingStoppedBar = i;
+    }
 
     // Stop-hedge time: skip hedging if current bar time >= stop time
     let pastStopTime = false;
@@ -277,7 +289,7 @@ export function runSimulation(
       pastStopTime = barTimeStr >= params.stopHedgeTime;
     }
 
-    if (!positionClosed && !pastStopTime && hedgeEligible && Math.abs(effectiveDelta) > params.deltaBand && !deltaInSafeZone && hedgesToday < params.maxHedgesPerDay) {
+    if (!positionClosed && !hedgingStopped && !pastStopTime && hedgeEligible && Math.abs(effectiveDelta) > params.deltaBand && deltaInHedgeRange && hedgesToday < params.maxHedgesPerDay) {
       // How many MGC contracts to trade? Each MGC = 10 oz
       const mgcContracts = Math.round(-effectiveDeltaUnits / hedgeMult);
       if (mgcContracts !== 0) {
@@ -433,6 +445,8 @@ export function runSimulation(
     tpBar,
     tpTime,
     tpPnl,
+    hedgingStopped,
+    hedgingStoppedBar,
     pricingSources,
   };
 }

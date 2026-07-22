@@ -2,7 +2,7 @@
 
 import { type SimResult, type LegPnl } from '@/lib/simulator';
 import { type ContractSpec, CONTRACT_SPECS } from '@/lib/contract-specs';
-import { Hash, TrendingDown, TrendingUp, Shield, Activity } from 'lucide-react';
+import { Hash, TrendingDown, TrendingUp, Shield, Activity, AlertTriangle } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const PriceChart = dynamic(() => import('./charts/price-chart'), { ssr: false, loading: () => <div className="h-[300px] bg-muted/20 rounded-lg animate-pulse" /> });
@@ -52,6 +52,21 @@ export default function OverviewDashboard({ result, contractSpec = CONTRACT_SPEC
             <p className="text-sm font-semibold text-green-400">Take Profit Hit!</p>
             <p className="text-xs text-muted-foreground">
               Closed all positions at bar #{r.tpBar} ({r.tpTime.toLocaleDateString?.('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) ?? 'N/A'}) — locked P&L: <span className="font-mono text-green-400">${r.tpPnl?.toFixed(0) ?? '0'}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Hedge Stopped Banner */}
+      {r.hedgingStopped && r.hedgingStoppedBar !== null && (
+        <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3 mb-4 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+            <Shield className="w-4 h-4 text-red-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-red-400">Hedging Stopped — Δ Out of Range</p>
+            <p className="text-xs text-muted-foreground">
+              Effective delta exceeded hedge range at bar #{r.hedgingStoppedBar}. Hedging permanently disabled from this point.
             </p>
           </div>
         </div>

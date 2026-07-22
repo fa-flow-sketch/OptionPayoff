@@ -154,21 +154,21 @@ export default function GlobalParams({ params, setParams, maxBars, contractSpec 
             <p className="text-[9px] text-muted-foreground/60 mt-0.5">Close all legs when option P&L ≥ TP%</p>
           </div>
 
-          {/* Stop Hedge Delta Range */}
+          {/* Hedge Range */}
           <div>
             <label className="text-xs text-muted-foreground flex items-center gap-1">
               <Shield className="w-3 h-3 text-blue-400" />
-              No-Hedge Δ Range
-              <span className="text-[10px] text-muted-foreground/60">(blank=off)</span>
+              Hedge Δ Range
+              <span className="text-[10px] text-muted-foreground/60">(blank=unlimited)</span>
             </label>
             <div className="flex items-center gap-1">
               <input
                 type="number"
-                placeholder="Off"
-                value={params?.stopHedgeDeltaLo ?? ''}
+                placeholder="∞"
+                value={params?.hedgeRangeLo ?? ''}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const val = e.target.value;
-                  update('stopHedgeDeltaLo', val === '' ? null : parseFloat(val));
+                  update('hedgeRangeLo', val === '' ? null : parseFloat(val));
                 }}
                 className="w-full bg-secondary text-xs font-mono rounded-lg px-2 py-2 border-0 outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 step={0.05}
@@ -176,17 +176,17 @@ export default function GlobalParams({ params, setParams, maxBars, contractSpec 
               <span className="text-muted-foreground text-[10px]">↔</span>
               <input
                 type="number"
-                placeholder="Off"
-                value={params?.stopHedgeDeltaHi ?? ''}
+                placeholder="∞"
+                value={params?.hedgeRangeHi ?? ''}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const val = e.target.value;
-                  update('stopHedgeDeltaHi', val === '' ? null : parseFloat(val));
+                  update('hedgeRangeHi', val === '' ? null : parseFloat(val));
                 }}
                 className="w-full bg-secondary text-xs font-mono rounded-lg px-2 py-2 border-0 outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-muted-foreground/40"
                 step={0.05}
               />
             </div>
-            <p className="text-[9px] text-muted-foreground/60 mt-0.5">If set, skip hedging when Δ is within this range (even if {'>'} band)</p>
+            <p className="text-[9px] text-muted-foreground/60 mt-0.5">Only hedge when Δ is within range. If Δ exceeds range → stop hedging permanently.</p>
           </div>
           {/* Stop Hedge Time */}
           <div>
