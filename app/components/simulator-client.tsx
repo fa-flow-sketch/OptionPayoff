@@ -6,7 +6,7 @@ import { runSimulation, type Leg, type SimParams, type SimResult } from '@/lib/s
 import { CONTRACT_SPECS, type ContractSpec } from '@/lib/contract-specs';
 import { fetchESUnderlying, fetchESOptions, parseESData, ALL_ES_CONTRACTS } from '@/lib/es-parser';
 import { fetchGCUnderlying, fetchGCOptions, parseGCData as parseGCJsonData, ALL_GC_CONTRACTS } from '@/lib/gc-parser';
-import { fetchHSIUnderlying, fetchHSIOptions, parseHSIData, ALL_HSI_CONTRACTS } from '@/lib/hsi-parser';
+import { fetchHSIUnderlying, fetchHSIOptions, parseHSIData, fetchVHSI, hasVHSICoverage, ALL_HSI_CONTRACTS } from '@/lib/hsi-parser';
 import LegBuilder from './leg-builder';
 import GlobalParams from './global-params';
 import ResultsTabs from './results-tabs';
@@ -74,6 +74,7 @@ export default function SimulatorClient() {
   const [gcLoading, setGcLoading] = useState(false);
   const [hsiContract, setHsiContract] = useState('HSI26H');
   const [hsiLoading, setHsiLoading] = useState(false);
+  const [hsiIvSource, setHsiIvSource] = useState<'bs' | 'vhsi'>('bs');
 
   // Load GC Parquet data on mount and when contract changes
   useEffect(() => {
@@ -160,16 +161,31 @@ export default function SimulatorClient() {
     setDataLoaded(false);
     setSimResult(null);
 
-    Promise.all([
+    const fetchers: Promise<any>[] = [
       fetchHSIUnderlying(hsiContract),
       fetchHSIOptions(hsiContract),
-    ])
-      .then(([underlying, options]) => {
-        const parsed = parseHSIData(underlying, options, hsiContract, params.riskFreeRate);
+    ];
+    if (hsiIvSource === 'vhsi') {
+      fetchers.push(fetchVHSI().catch(() => null));
+    }
+
+    Promise.all(fetchers)
+      .then((results) => {
+        const underlying = results[0];
+        const options = results[1];
+        const vhsiMap = hsiIvSource === 'vhsi' ? results[2] : null;
+        const parsed = parseHSIData(underlying, options, hsiContract, params.riskFreeRate, vhsiMap);
+        if (vhsiMap) {
+          const count = parsed.filter(b => b.vix >= 16 && b.vix <= 35).length;
+          if (count === 0) {
+            toast.warning('VHSI coverage not available for this contract, using data IV');
+          }
+        }
         if (parsed.length > 0) {
           setBars(parsed);
           setDataLoaded(true);
-          setFileName(`${hsiContract} (HSI Options)`);
+          const ivLabel = hsiIvSource === 'vhsi' ? 'VHSI' : 'BS IV';
+          setFileName(`${hsiContract} (HSI ${ivLabel})`);
           const first = parsed[0]?.time;
           const last = parsed[parsed.length - 1]?.time;
           if (first) setStartDate(first.toISOString().slice(0, 10));
@@ -189,7 +205,7 @@ export default function SimulatorClient() {
         toast.error(`Failed to load HSI data: ${err?.message ?? 'Unknown'}`);
       })
       .finally(() => setHsiLoading(false));
-  }, [dataSource, hsiContract, params.riskFreeRate]);
+  }, [dataSource, hsiContract, params.riskFreeRate, hsiIvSource]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e?.target?.files?.[0];
@@ -388,10 +404,34 @@ export default function SimulatorClient() {
                   >
                     {ALL_HSI_CONTRACTS.map((c) => (
                       <option key={c.symbol} value={c.symbol} disabled={c.rows < 5}>
-                        {c.label} {c.rows < 5 ? '(no data)' : c.rows < 20 ? `(${c.rows} ⚠️)` : `(${c.rows})`}
+                        {c.label} {c.rows < 5 ? '(no data)' : c.rows < 20 ? `(${c.rows} ⚠️)` : `(${c.rows})`}{hasVHSICoverage(c.symbol) ? ' VHSI' : ''}
                       </option>
                     ))}
                   </select>
+                  {/* IV Source toggle */}
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] text-muted-foreground">IV Source:</span>
+                    <button
+                      onClick={() => setHsiIvSource('bs')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                        hsiIvSource === 'bs'
+                          ? 'bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/40'
+                          : 'bg-secondary text-muted-foreground border border-border/30 hover:border-[#F5A623]/30'
+                      }`}
+                    >
+                      BS IV
+                    </button>
+                    <button
+                      onClick={() => setHsiIvSource('vhsi')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                        hsiIvSource === 'vhsi'
+                          ? 'bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/40'
+                          : 'bg-secondary text-muted-foreground border border-border/30 hover:border-[#F5A623]/30'
+                      }`}
+                    >
+                      VHSI
+                    </button>
+                  </div>
                   {hsiLoading && (
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                       <Loader2 className="w-3 h-3 animate-spin" />

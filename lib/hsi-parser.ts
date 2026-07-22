@@ -1,5 +1,42 @@
 import type { BarData } from './csv-parser';
 
+// ---- VHSI Daily Data ----
+
+let vhsiCache: Map<string, number> | null = null;
+
+/** Load VHSI daily CSV and return a Map<"YYYY-MM-DD", vhsi_close> */
+export async function fetchVHSI(): Promise<Map<string, number>> {
+  if (vhsiCache) return vhsiCache;
+  const res = await fetch('/data/hsi/vhsi_daily.csv');
+  if (!res.ok) throw new Error('VHSI data not available');
+  const text = await res.text();
+  const map = new Map<string, number>();
+  const lines = text.trim().split('\n');
+  // Skip header: time,open,high,low,close,Volume
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    if (cols.length < 5) continue;
+    const unixSec = parseInt(cols[0], 10);
+    const close = parseFloat(cols[4]);
+    if (isNaN(unixSec) || isNaN(close)) continue;
+    // Convert unix seconds → "YYYY-MM-DD" in UTC
+    const d = new Date(unixSec * 1000);
+    const dateKey = d.toISOString().slice(0, 10);
+    map.set(dateKey, close);
+  }
+  vhsiCache = map;
+  return map;
+}
+
+/** Check if the HSI contract has VHSI coverage (data from 2025-04 to 2026-07) */
+export function hasVHSICoverage(contract: string): boolean {
+  const vhsiContracts = new Set([
+    'HSI25K', 'HSI25M', 'HSI25N', 'HSI25Q', 'HSI25U', 'HSI25V',
+    'HSI25X', 'HSI25Z', 'HSI26F', 'HSI26G', 'HSI26H', 'HSI26J', 'HSI26K',
+  ]);
+  return vhsiContracts.has(contract);
+}
+
 // HSI futures options expiration dates (from CSV data)
 const HSI_EXPIRY: Record<string, string> = {
   HSI22F: '2022-01-21', HSI2F: '2022-01-21', HSI22G: '2022-02-18',
@@ -108,7 +145,8 @@ export function parseHSIData(
   underlying: UnderlyingRow[],
   options: OptionRow[],
   contract: string,
-  _rfr: number = 0.05
+  _rfr: number = 0.05,
+  vhsiMap?: Map<string, number> | null,
 ): BarData[] {
   // Index options by date
   const optsByTs = new Map<string, OptionRow[]>();
@@ -147,11 +185,20 @@ export function parseHSIData(
 
     if (bp === undefined) continue;
 
+    // Use VHSI if available for this date, otherwise fall back to data IV
+    let iv: number;
+    if (vhsiMap) {
+      const vhsiVal = vhsiMap.get(dateStr);
+      iv = vhsiVal ?? (ivFromData ?? 20);
+    } else {
+      iv = ivFromData ?? 20;
+    }
+
     bars.push({
       time: new Date(dateStr + 'T00:00:00Z'),
       timestamp: Math.floor(t / 1000),
       close: bp,
-      vix: ivFromData ?? 20,
+      vix: iv,
     });
   }
 
