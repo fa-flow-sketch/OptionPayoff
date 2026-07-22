@@ -184,7 +184,7 @@ export default function OverviewDashboard({ result, contractSpec = CONTRACT_SPEC
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl bg-muted/20 border border-border/50 p-4">
-          <h3 className="text-sm font-semibold mb-3 text-muted-foreground">{contractSpec.id === 'ES' ? 'ES' : 'GC'} Close Price</h3>
+          <h3 className="text-sm font-semibold mb-3 text-muted-foreground">{contractSpec.id} Close Price</h3>
           <div className="h-[300px]">
             <PriceChart bars={r.bars ?? []} />
           </div>

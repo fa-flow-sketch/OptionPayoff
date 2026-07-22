@@ -407,7 +407,7 @@ export default function PayoffChart({ legs, currentATM, iv, rfRate, onUpdateLegS
               {/* Tooltip box */}
               <g transform={`translate(${hoverInfo.x + (hoverInfo.x > MARGIN.left + plotW - 100 ? -95 : 10)}, ${Math.max(MARGIN.top, hoverInfo.y - 30)})`}>
                 <rect width={85} height={34} rx={4} fill="hsl(228, 14%, 14%)" fillOpacity={0.95} stroke="#555" strokeWidth={0.5} />
-                <text x={6} y={13} fill="#888" fontSize={9} fontFamily="monospace">GC ${hoverInfo.price.toFixed(0)}</text>
+                <text x={6} y={13} fill="#888" fontSize={9} fontFamily="monospace">Price ${hoverInfo.price.toFixed(0)}</text>
                 <text x={6} y={27} fill={hoverInfo.pnl >= 0 ? '#4ade80' : '#f87171'} fontSize={11} fontFamily="monospace" fontWeight="bold">
                   ${hoverInfo.pnl >= 0 ? '+' : ''}${hoverInfo.pnl.toLocaleString()}
                 </text>

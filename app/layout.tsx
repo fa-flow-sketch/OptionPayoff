@@ -12,15 +12,15 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mon
 
 export const metadata = {
   metadataBase: new URL(process.env.NEXTAUTH_URL || 'http://localhost:3000'),
-  title: 'GC Delta-Hedge Simulator',
-  description: 'Black-Scholes delta-hedge P&L simulator for Gold Futures (GC/MGC)',
+  title: 'Delta-Hedge Simulator',
+  description: 'Black-Scholes delta-hedge P&L simulator for Futures Options (GC, ES, HSI)',
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',
   },
   openGraph: {
-    title: 'GC Delta-Hedge Simulator',
-    description: 'Black-Scholes delta-hedge P&L simulator for Gold Futures (GC/MGC)',
+    title: 'Delta-Hedge Simulator',
+    description: 'Black-Scholes delta-hedge P&L simulator for Futures Options (GC, ES, HSI)',
     images: [{ url: '/og-image.png' }],
   },
 }
